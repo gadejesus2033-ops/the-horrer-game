@@ -2,12 +2,12 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Haunted City Escape (Not Scary)</title>
+<title>Escape the City</title>
 <style>
 body { margin:0; overflow:hidden; background:black; }
 #ui {
-  position:absolute; top:10px; left:10px; color:white;
-  font-family:monospace;
+  position:absolute; top:10px; left:10px;
+  color:white; font-family:monospace;
 }
 </style>
 </head>
@@ -18,7 +18,7 @@ body { margin:0; overflow:hidden; background:black; }
 
 <script>
 let scene = new THREE.Scene();
-scene.fog = new THREE.Fog(0x000000, 10, 100);
+scene.fog = new THREE.Fog(0x000000, 10, 120);
 
 let camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 1000);
 let renderer = new THREE.WebGLRenderer();
@@ -26,7 +26,7 @@ renderer.setSize(innerWidth, innerHeight);
 document.body.appendChild(renderer.domElement);
 
 // LIGHT
-let light = new THREE.PointLight(0xffffff, 1, 50);
+let light = new THREE.PointLight(0xffffff,1,60);
 scene.add(light);
 
 // GROUND
@@ -38,22 +38,20 @@ ground.rotation.x = -Math.PI/2;
 scene.add(ground);
 
 // BUILDINGS
-for(let i=0;i<40;i++){
-  let height = Math.random()*15+5;
+for(let i=0;i<50;i++){
+  let h = Math.random()*20+5;
   let b = new THREE.Mesh(
-    new THREE.BoxGeometry(5, height, 5),
+    new THREE.BoxGeometry(5,h,5),
     new THREE.MeshStandardMaterial({color:0x222222})
   );
-  b.position.set(
-    (Math.random()-0.5)*100,
-    height/2,
-    (Math.random()-0.5)*100
-  );
+  b.position.set((Math.random()-0.5)*100,h/2,(Math.random()-0.5)*100);
   scene.add(b);
 }
 
 // PLAYER
 camera.position.y = 2;
+let velocityY = 0;
+let onGround = true;
 
 // CONTROLS
 let keys = {};
@@ -61,104 +59,187 @@ document.addEventListener("keydown", e=>keys[e.key.toLowerCase()] = true);
 document.addEventListener("keyup", e=>keys[e.key.toLowerCase()] = false);
 
 // MOUSE LOOK
-let yaw=0, pitch=0;
-document.body.onclick = ()=>document.body.requestPointerLock();
+let yaw=0,pitch=0;
+document.body.onclick=()=>document.body.requestPointerLock();
 document.addEventListener("mousemove", e=>{
-  if(document.pointerLockElement){
-    yaw -= e.movementX*0.002;
-    pitch -= e.movementY*0.002;
-    pitch = Math.max(-1.5, Math.min(1.5, pitch));
-    camera.rotation.set(pitch, yaw, 0);
-  }
+ if(document.pointerLockElement){
+  yaw -= e.movementX*0.002;
+  pitch -= e.movementY*0.002;
+  pitch = Math.max(-1.5,Math.min(1.5,pitch));
+  camera.rotation.set(pitch,yaw,0);
+ }
 });
 
-// KEYS TO COLLECT
-let collectibles = [];
-let collected = 0;
-for(let i=0;i<3;i++){
-  let key = new THREE.Mesh(
-    new THREE.SphereGeometry(0.5),
-    new THREE.MeshStandardMaterial({color:0xffff00})
-  );
-  key.position.set((Math.random()-0.5)*80,1,(Math.random()-0.5)*80);
-  scene.add(key);
-  collectibles.push(key);
+// MOVEMENT + JUMP
+function move(){
+ let speed = boosted ? 0.3 : 0.15;
+
+ let forward = new THREE.Vector3(Math.sin(yaw),0,Math.cos(yaw));
+ let right = new THREE.Vector3(Math.cos(yaw),0,-Math.sin(yaw));
+
+ if(keys["w"]) camera.position.add(forward.clone().multiplyScalar(-speed));
+ if(keys["s"]) camera.position.add(forward.clone().multiplyScalar(speed));
+ if(keys["a"]) camera.position.add(right.clone().multiplyScalar(-speed));
+ if(keys["d"]) camera.position.add(right.clone().multiplyScalar(speed));
+
+ // JUMP
+ if(keys[" "] && onGround){
+  velocityY = 0.25;
+  onGround = false;
+ }
+
+ velocityY -= 0.01;
+ camera.position.y += velocityY;
+
+ if(camera.position.y <= 2){
+  camera.position.y = 2;
+  velocityY = 0;
+  onGround = true;
+ }
 }
 
-// EXIT
-let exit = new THREE.Mesh(
-  new THREE.BoxGeometry(3,5,1),
-  new THREE.MeshStandardMaterial({color:0x00ff00})
+// KEYS
+let collectibles=[], collected=0;
+for(let i=0;i<3;i++){
+ let k=new THREE.Mesh(
+  new THREE.SphereGeometry(0.5),
+  new THREE.MeshStandardMaterial({color:0xffff00})
+ );
+ k.position.set((Math.random()-0.5)*80,1,(Math.random()-0.5)*80);
+ scene.add(k);
+ collectibles.push(k);
+}
+
+// EXIT (END GOAL)
+let exit=new THREE.Mesh(
+ new THREE.CylinderGeometry(2,2,10),
+ new THREE.MeshStandardMaterial({color:0x00ffff})
 );
-exit.position.set(0,2.5,-90);
+exit.position.set(0,5,-90);
 scene.add(exit);
 
-// ENEMY (RED BALL)
-let enemy = new THREE.Mesh(
-  new THREE.SphereGeometry(1.5),
-  new THREE.MeshStandardMaterial({color:0xff0000})
-);
-enemy.position.set(0,2,20);
-scene.add(enemy);
-
-// MOVEMENT
-function move(){
-  let speed = 0.15;
-  let forward = new THREE.Vector3(Math.sin(yaw),0,Math.cos(yaw));
-  let right = new THREE.Vector3(Math.cos(yaw),0,-Math.sin(yaw));
-
-  if(keys["w"]) camera.position.add(forward.clone().multiplyScalar(-speed));
-  if(keys["s"]) camera.position.add(forward.clone().multiplyScalar(speed));
-  if(keys["a"]) camera.position.add(right.clone().multiplyScalar(-speed));
-  if(keys["d"]) camera.position.add(right.clone().multiplyScalar(speed));
+// SAFE ZONES
+let safeZones=[];
+for(let i=0;i<2;i++){
+ let s=new THREE.Mesh(
+  new THREE.CylinderGeometry(5,5,0.2,32),
+  new THREE.MeshStandardMaterial({color:0x00ff00})
+ );
+ s.position.set((Math.random()-0.5)*80,0.1,(Math.random()-0.5)*80);
+ scene.add(s);
+ safeZones.push(s);
 }
 
-// ENEMY AI (SIMPLE CHASE)
-function updateEnemy(){
-  let dir = camera.position.clone().sub(enemy.position).normalize();
-  enemy.position.add(dir.multiplyScalar(0.05));
+// ENEMIES (RED BALLS)
+let enemies=[];
+for(let i=0;i<3;i++){
+ let e=new THREE.Mesh(
+  new THREE.SphereGeometry(1.5),
+  new THREE.MeshStandardMaterial({color:0xff0000})
+ );
+ e.position.set((Math.random()-0.5)*50,2,(Math.random()-0.5)*50);
+ scene.add(e);
+ enemies.push(e);
+}
 
-  if(enemy.position.distanceTo(camera.position) < 2){
-    alert("A red ball got you!");
-    location.reload();
+// POWERUPS
+let boosted=false, freeze=false;
+
+let powerups=[];
+
+// SPEED
+let speedOrb=new THREE.Mesh(
+ new THREE.SphereGeometry(1),
+ new THREE.MeshStandardMaterial({color:0x0000ff})
+);
+speedOrb.position.set(20,1,20);
+scene.add(speedOrb);
+powerups.push({mesh:speedOrb,type:"speed"});
+
+// FREEZE
+let freezeOrb=new THREE.Mesh(
+ new THREE.SphereGeometry(1),
+ new THREE.MeshStandardMaterial({color:0xaa00ff})
+);
+freezeOrb.position.set(-20,1,-20);
+scene.add(freezeOrb);
+powerups.push({mesh:freezeOrb,type:"freeze"});
+
+// CHECK SAFE ZONE
+function inSafeZone(){
+ return safeZones.some(z=>z.position.distanceTo(camera.position)<5);
+}
+
+// ENEMY AI
+function updateEnemies(){
+ if(freeze) return;
+
+ enemies.forEach(e=>{
+  if(inSafeZone()) return;
+
+  let dir=camera.position.clone().sub(e.position).normalize();
+  e.position.add(dir.multiplyScalar(0.05));
+
+  if(e.position.distanceTo(camera.position)<2){
+   alert("A red ball got you!");
+   location.reload();
   }
+ });
 }
 
 // COLLECT
 function checkCollect(){
-  collectibles.forEach((k,i)=>{
-    if(k && k.position.distanceTo(camera.position) < 2){
-      scene.remove(k);
-      collectibles[i] = null;
-      collected++;
-      document.getElementById("ui").innerText = "Keys: "+collected+" / 3";
-    }
-  });
-}
-
-// EXIT CHECK
-function checkExit(){
-  if(collected === 3 && camera.position.distanceTo(exit.position) < 3){
-    alert("YOU ESCAPED!");
-    location.reload();
+ collectibles.forEach((k,i)=>{
+  if(k && k.position.distanceTo(camera.position)<2){
+   scene.remove(k);
+   collectibles[i]=null;
+   collected++;
+   ui.innerText="Keys: "+collected+" / 3";
   }
+ });
 }
 
-// ANIMATE
+// POWERUPS
+function checkPowerups(){
+ powerups.forEach(p=>{
+  if(p.mesh && p.mesh.position.distanceTo(camera.position)<2){
+   if(p.type==="speed"){
+    boosted=true;
+    setTimeout(()=>boosted=false,5000);
+   }
+   if(p.type==="freeze"){
+    freeze=true;
+    setTimeout(()=>freeze=false,5000);
+   }
+   scene.remove(p.mesh);
+   p.mesh=null;
+  }
+ });
+}
+
+// EXIT
+function checkExit(){
+ if(collected===3 && camera.position.distanceTo(exit.position)<4){
+  alert("YOU ESCAPED!");
+  location.reload();
+ }
+}
+
+// LOOP
 function animate(){
-  requestAnimationFrame(animate);
+ requestAnimationFrame(animate);
 
-  move();
-  updateEnemy();
-  checkCollect();
-  checkExit();
+ move();
+ updateEnemies();
+ checkCollect();
+ checkPowerups();
+ checkExit();
 
-  light.position.copy(camera.position);
+ light.position.copy(camera.position);
 
-  renderer.render(scene, camera);
+ renderer.render(scene,camera);
 }
 animate();
-
 </script>
 </body>
 </html>
