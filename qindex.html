@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Haunted City Escape (Not Scary)</title>
+<style>
+body { margin:0; overflow:hidden; background:black; }
+#ui {
+  position:absolute; top:10px; left:10px; color:white;
+  font-family:monospace;
+}
+</style>
+</head>
+<body>
+<div id="ui">Keys: 0 / 3</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
+
+<script>
+let scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0x000000, 10, 100);
+
+let camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 1000);
+let renderer = new THREE.WebGLRenderer();
+renderer.setSize(innerWidth, innerHeight);
+document.body.appendChild(renderer.domElement);
+
+// LIGHT
+let light = new THREE.PointLight(0xffffff, 1, 50);
+scene.add(light);
+
+// GROUND
+let ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(200,200),
+  new THREE.MeshStandardMaterial({color:0x111111})
+);
+ground.rotation.x = -Math.PI/2;
+scene.add(ground);
+
+// BUILDINGS
+for(let i=0;i<40;i++){
+  let height = Math.random()*15+5;
+  let b = new THREE.Mesh(
+    new THREE.BoxGeometry(5, height, 5),
+    new THREE.MeshStandardMaterial({color:0x222222})
+  );
+  b.position.set(
+    (Math.random()-0.5)*100,
+    height/2,
+    (Math.random()-0.5)*100
+  );
+  scene.add(b);
+}
+
+// PLAYER
+camera.position.y = 2;
+
+// CONTROLS
+let keys = {};
+document.addEventListener("keydown", e=>keys[e.key.toLowerCase()] = true);
+document.addEventListener("keyup", e=>keys[e.key.toLowerCase()] = false);
+
+// MOUSE LOOK
+let yaw=0, pitch=0;
+document.body.onclick = ()=>document.body.requestPointerLock();
+document.addEventListener("mousemove", e=>{
+  if(document.pointerLockElement){
+    yaw -= e.movementX*0.002;
+    pitch -= e.movementY*0.002;
+    pitch = Math.max(-1.5, Math.min(1.5, pitch));
+    camera.rotation.set(pitch, yaw, 0);
+  }
+});
+
+// KEYS TO COLLECT
+let collectibles = [];
+let collected = 0;
+for(let i=0;i<3;i++){
+  let key = new THREE.Mesh(
+    new THREE.SphereGeometry(0.5),
+    new THREE.MeshStandardMaterial({color:0xffff00})
+  );
+  key.position.set((Math.random()-0.5)*80,1,(Math.random()-0.5)*80);
+  scene.add(key);
+  collectibles.push(key);
+}
+
+// EXIT
+let exit = new THREE.Mesh(
+  new THREE.BoxGeometry(3,5,1),
+  new THREE.MeshStandardMaterial({color:0x00ff00})
+);
+exit.position.set(0,2.5,-90);
+scene.add(exit);
+
+// ENEMY (RED BALL)
+let enemy = new THREE.Mesh(
+  new THREE.SphereGeometry(1.5),
+  new THREE.MeshStandardMaterial({color:0xff0000})
+);
+enemy.position.set(0,2,20);
+scene.add(enemy);
+
+// MOVEMENT
+function move(){
+  let speed = 0.15;
+  let forward = new THREE.Vector3(Math.sin(yaw),0,Math.cos(yaw));
+  let right = new THREE.Vector3(Math.cos(yaw),0,-Math.sin(yaw));
+
+  if(keys["w"]) camera.position.add(forward.clone().multiplyScalar(-speed));
+  if(keys["s"]) camera.position.add(forward.clone().multiplyScalar(speed));
+  if(keys["a"]) camera.position.add(right.clone().multiplyScalar(-speed));
+  if(keys["d"]) camera.position.add(right.clone().multiplyScalar(speed));
+}
+
+// ENEMY AI (SIMPLE CHASE)
+function updateEnemy(){
+  let dir = camera.position.clone().sub(enemy.position).normalize();
+  enemy.position.add(dir.multiplyScalar(0.05));
+
+  if(enemy.position.distanceTo(camera.position) < 2){
+    alert("A red ball got you!");
+    location.reload();
+  }
+}
+
+// COLLECT
+function checkCollect(){
+  collectibles.forEach((k,i)=>{
+    if(k && k.position.distanceTo(camera.position) < 2){
+      scene.remove(k);
+      collectibles[i] = null;
+      collected++;
+      document.getElementById("ui").innerText = "Keys: "+collected+" / 3";
+    }
+  });
+}
+
+// EXIT CHECK
+function checkExit(){
+  if(collected === 3 && camera.position.distanceTo(exit.position) < 3){
+    alert("YOU ESCAPED!");
+    location.reload();
+  }
+}
+
+// ANIMATE
+function animate(){
+  requestAnimationFrame(animate);
+
+  move();
+  updateEnemy();
+  checkCollect();
+  checkExit();
+
+  light.position.copy(camera.position);
+
+  renderer.render(scene, camera);
+}
+animate();
+
+</script>
+</body>
+</html>
