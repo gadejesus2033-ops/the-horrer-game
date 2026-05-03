@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Escape City - Fixed Levels</title>
+<title>Escape City - Working</title>
 <style>
 body { margin:0; overflow:hidden; background:black; }
 #ui {
@@ -13,160 +13,128 @@ body { margin:0; overflow:hidden; background:black; }
 </head>
 <body>
 
-<div id="ui">Level 1</div>
+<div id="ui">Loading...</div>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
 
 <script>
-let scene, camera, renderer, light;
-let keys={}, yaw=0, pitch=0;
-let velocityY=0, onGround=true;
+let scene = new THREE.Scene();
+let camera = new THREE.PerspectiveCamera(75,innerWidth/innerHeight,0.1,1000);
+let renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth,innerHeight);
+document.body.appendChild(renderer.domElement);
 
+// ✅ LIGHT FIX (this was the main problem)
+let ambient = new THREE.AmbientLight(0xffffff,0.6);
+scene.add(ambient);
+
+let light = new THREE.PointLight(0xffffff,1);
+scene.add(light);
+
+camera.position.set(0,2,10);
+
+// UI
+let ui = document.getElementById("ui");
+
+// CONTROLS
+let keys = {};
+document.addEventListener("keydown",e=>keys[e.code]=true);
+document.addEventListener("keyup",e=>keys[e.code]=false);
+
+document.body.onclick = ()=>document.body.requestPointerLock();
+
+let yaw=0,pitch=0;
+document.addEventListener("mousemove",e=>{
+ if(document.pointerLockElement){
+  yaw -= e.movementX*0.002;
+  pitch -= e.movementY*0.002;
+  pitch = Math.max(-1.5,Math.min(1.5,pitch));
+  camera.rotation.set(pitch,yaw,0);
+ }
+});
+
+// PLAYER
+let velocityY=0,onGround=true;
+
+// LEVEL DATA
 let level=1;
 let collected=0;
+let objects=[], enemies=[], keysList=[];
+let exit;
 
-let collectibles=[], enemies=[], safeZones=[], powerups=[];
-let exit=null;
-let worldObjects=[];
-
-let speedBoost=false, freeze=false;
-
-init();
-startLevel();
-
-function init(){
- scene=new THREE.Scene();
- scene.fog=new THREE.Fog(0x000000,10,150);
-
- camera=new THREE.PerspectiveCamera(75,innerWidth/innerHeight,0.1,1000);
- camera.position.set(0,2,10);
-
- renderer=new THREE.WebGLRenderer();
- renderer.setSize(innerWidth,innerHeight);
- document.body.appendChild(renderer.domElement);
-
- light=new THREE.PointLight(0xffffff,1,60);
- scene.add(light);
-
- document.addEventListener("keydown",e=>keys[e.code]=true);
- document.addEventListener("keyup",e=>keys[e.code]=false);
-
- document.body.onclick=()=>document.body.requestPointerLock();
-
- document.addEventListener("mousemove",e=>{
-  if(document.pointerLockElement){
-   yaw-=e.movementX*0.002;
-   pitch-=e.movementY*0.002;
-   pitch=Math.max(-1.5,Math.min(1.5,pitch));
-   camera.rotation.set(pitch,yaw,0);
-  }
- });
-
- animate();
+// CLEAR
+function clearWorld(){
+ objects.forEach(o=>scene.remove(o));
+ objects=[]; enemies=[]; keysList=[];
 }
 
-// CLEAR EVERYTHING
-function clearLevel(){
- worldObjects.forEach(obj=>scene.remove(obj));
- worldObjects=[];
-
- collectibles=[]; enemies=[]; safeZones=[]; powerups=[];
- exit=null;
-}
-
-// CREATE OBJECT + TRACK
+// ADD HELPER
 function add(obj){
  scene.add(obj);
- worldObjects.push(obj);
+ objects.push(obj);
  return obj;
 }
 
+// START LEVEL
 function startLevel(){
- clearLevel();
+ clearWorld();
  collected=0;
- speedBoost=false;
- freeze=false;
 
  // ground
- let ground = add(new THREE.Mesh(
+ let g = add(new THREE.Mesh(
   new THREE.PlaneGeometry(200,200),
-  new THREE.MeshStandardMaterial({color:0x111111})
+  new THREE.MeshStandardMaterial({color:0x333333})
  ));
- ground.rotation.x=-Math.PI/2;
+ g.rotation.x=-Math.PI/2;
 
  // buildings
- for(let i=0;i<30+level*10;i++){
-  let h=Math.random()*20+5;
+ for(let i=0;i<30+level*5;i++){
+  let h=5+Math.random()*15;
   let b=add(new THREE.Mesh(
    new THREE.BoxGeometry(5,h,5),
-   new THREE.MeshStandardMaterial({color:0x222222})
+   new THREE.MeshStandardMaterial({color:0x555555})
   ));
-  b.position.set((Math.random()-0.5)*120,h/2,(Math.random()-0.5)*120);
+  b.position.set((Math.random()-0.5)*100,h/2,(Math.random()-0.5)*100);
  }
 
  // keys
- for(let i=0;i<2+level;i++){
+ for(let i=0;i<level+2;i++){
   let k=add(new THREE.Mesh(
    new THREE.SphereGeometry(0.5),
    new THREE.MeshStandardMaterial({color:0xffff00})
   ));
-  k.position.set((Math.random()-0.5)*100,1,(Math.random()-0.5)*100);
-  collectibles.push(k);
+  k.position.set((Math.random()-0.5)*80,1,(Math.random()-0.5)*80);
+  keysList.push(k);
  }
 
- // exit
- exit = add(new THREE.Mesh(
-  new THREE.CylinderGeometry(2,2,8),
-  new THREE.MeshStandardMaterial({color:0x00ffff})
- ));
- exit.position.set(0,4,-100);
-
  // enemies
- for(let i=0;i<level+2;i++){
+ for(let i=0;i<level+1;i++){
   let e=add(new THREE.Mesh(
    new THREE.SphereGeometry(1.5),
    new THREE.MeshStandardMaterial({color:0xff0000})
   ));
-  e.position.set((Math.random()-0.5)*80,2,(Math.random()-0.5)*80);
+  e.position.set((Math.random()-0.5)*50,2,(Math.random()-0.5)*50);
   enemies.push(e);
  }
 
- // safe zones
- for(let i=0;i<2;i++){
-  let s=add(new THREE.Mesh(
-   new THREE.CylinderGeometry(5,5,0.2,32),
-   new THREE.MeshStandardMaterial({color:0x00ff00})
-  ));
-  s.position.set((Math.random()-0.5)*100,0.1,(Math.random()-0.5)*100);
-  safeZones.push(s);
- }
-
- // powerups
- let speedOrb = add(new THREE.Mesh(
-  new THREE.SphereGeometry(1),
-  new THREE.MeshStandardMaterial({color:0x0000ff})
+ // exit
+ exit = add(new THREE.Mesh(
+  new THREE.BoxGeometry(3,6,3),
+  new THREE.MeshStandardMaterial({color:0x00ffff})
  ));
- speedOrb.position.set(20,1,20);
- powerups.push({mesh:speedOrb,type:"speed"});
-
- let freezeOrb = add(new THREE.Mesh(
-  new THREE.SphereGeometry(1),
-  new THREE.MeshStandardMaterial({color:0xaa00ff})
- ));
- freezeOrb.position.set(-20,1,-20);
- powerups.push({mesh:freezeOrb,type:"freeze"});
+ exit.position.set(0,3,-90);
 
  updateUI();
 }
 
+// UI
 function updateUI(){
- document.getElementById("ui").innerText =
-  "Level "+level+" | Keys: "+collected+" / "+collectibles.length;
+ ui.innerText = "Level "+level+" | Keys "+collected+" / "+keysList.length;
 }
 
-// movement
+// MOVE
 function move(){
- let speed=speedBoost?0.3:0.15;
+ let speed=0.15;
 
  let f=new THREE.Vector3(Math.sin(yaw),0,Math.cos(yaw));
  let r=new THREE.Vector3(Math.cos(yaw),0,-Math.sin(yaw));
@@ -176,6 +144,7 @@ function move(){
  if(keys["KeyA"]) camera.position.add(r.clone().multiplyScalar(-speed));
  if(keys["KeyD"]) camera.position.add(r.clone().multiplyScalar(speed));
 
+ // jump
  if(keys["Space"] && onGround){
   velocityY=0.25;
   onGround=false;
@@ -191,65 +160,38 @@ function move(){
  }
 }
 
-function isSafe(){
- return safeZones.some(z=>z.position.distanceTo(camera.position)<5);
-}
+// GAME LOGIC
+function update(){
+ // collect
+ keysList.forEach((k,i)=>{
+  if(k && k.position.distanceTo(camera.position)<2){
+   scene.remove(k);
+   keysList[i]=null;
+   collected++;
+   updateUI();
+  }
+ });
 
-function updateEnemies(){
- if(freeze) return;
-
+ // enemies
  enemies.forEach(e=>{
-  if(isSafe()) return;
-
   let dir=camera.position.clone().sub(e.position).normalize();
-  e.position.add(dir.multiplyScalar(0.05+level*0.01));
+  e.position.add(dir.multiplyScalar(0.04+level*0.01));
 
   if(e.position.distanceTo(camera.position)<2){
    alert("Caught!");
    location.reload();
   }
  });
-}
 
-function checkCollect(){
- collectibles.forEach((k,i)=>{
-  if(k && k.position.distanceTo(camera.position)<2){
-   scene.remove(k);
-   collectibles[i]=null;
-   collected++;
-   updateUI();
-  }
- });
-}
-
-function checkPowerups(){
- powerups.forEach(p=>{
-  if(p.mesh && p.mesh.position.distanceTo(camera.position)<2){
-   if(p.type==="speed"){
-    speedBoost=true;
-    setTimeout(()=>speedBoost=false,4000);
-   }
-   if(p.type==="freeze"){
-    freeze=true;
-    setTimeout(()=>freeze=false,4000);
-   }
-   scene.remove(p.mesh);
-   p.mesh=null;
-  }
- });
-}
-
-function checkExit(){
- if(collected===collectibles.length &&
+ // exit
+ if(collected===keysList.filter(k=>k).length &&
     camera.position.distanceTo(exit.position)<4){
 
   level++;
-
   if(level>5){
-   alert("YOU BEAT THE GAME!");
+   alert("YOU WIN!");
    location.reload();
   }else{
-   alert("Level Complete!");
    startLevel();
   }
  }
@@ -260,15 +202,16 @@ function animate(){
  requestAnimationFrame(animate);
 
  move();
- updateEnemies();
- checkCollect();
- checkPowerups();
- checkExit();
+ update();
 
  light.position.copy(camera.position);
 
  renderer.render(scene,camera);
 }
+
+// START
+startLevel();
+animate();
 </script>
 
 </body>
