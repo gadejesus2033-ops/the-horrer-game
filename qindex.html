@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Escape City - Working</title>
+<title>Escape City - Lighting Fixed</title>
 <style>
 body { margin:0; overflow:hidden; background:black; }
 #ui {
@@ -18,32 +18,36 @@ body { margin:0; overflow:hidden; background:black; }
 <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
 
 <script>
+// SCENE
 let scene = new THREE.Scene();
+scene.background = new THREE.Color(0x000000);
+
 let camera = new THREE.PerspectiveCamera(75,innerWidth/innerHeight,0.1,1000);
+camera.position.set(0,2,10);
+
 let renderer = new THREE.WebGLRenderer({antialias:true});
 renderer.setSize(innerWidth,innerHeight);
 document.body.appendChild(renderer.domElement);
 
-// ✅ LIGHT FIX (this was the main problem)
-let ambient = new THREE.AmbientLight(0xffffff,0.6);
+// ✅ LIGHTING (FIXED)
+let ambient = new THREE.AmbientLight(0xffffff, 1);
 scene.add(ambient);
 
-let light = new THREE.PointLight(0xffffff,1);
+let light = new THREE.PointLight(0xffffff, 2, 100);
 scene.add(light);
-
-camera.position.set(0,2,10);
 
 // UI
 let ui = document.getElementById("ui");
 
-// CONTROLS
+// INPUT
 let keys = {};
 document.addEventListener("keydown",e=>keys[e.code]=true);
 document.addEventListener("keyup",e=>keys[e.code]=false);
 
+// MOUSE LOOK
+let yaw=0, pitch=0;
 document.body.onclick = ()=>document.body.requestPointerLock();
 
-let yaw=0,pitch=0;
 document.addEventListener("mousemove",e=>{
  if(document.pointerLockElement){
   yaw -= e.movementX*0.002;
@@ -54,9 +58,9 @@ document.addEventListener("mousemove",e=>{
 });
 
 // PLAYER
-let velocityY=0,onGround=true;
+let velocityY=0, onGround=true;
 
-// LEVEL DATA
+// GAME STATE
 let level=1;
 let collected=0;
 let objects=[], enemies=[], keysList=[];
@@ -68,7 +72,7 @@ function clearWorld(){
  objects=[]; enemies=[]; keysList=[];
 }
 
-// ADD HELPER
+// ADD
 function add(obj){
  scene.add(obj);
  objects.push(obj);
@@ -85,21 +89,21 @@ function startLevel(){
   new THREE.PlaneGeometry(200,200),
   new THREE.MeshStandardMaterial({color:0x333333})
  ));
- g.rotation.x=-Math.PI/2;
+ g.rotation.x = -Math.PI/2;
 
  // buildings
  for(let i=0;i<30+level*5;i++){
-  let h=5+Math.random()*15;
-  let b=add(new THREE.Mesh(
+  let h = 5 + Math.random()*15;
+  let b = add(new THREE.Mesh(
    new THREE.BoxGeometry(5,h,5),
    new THREE.MeshStandardMaterial({color:0x555555})
   ));
-  b.position.set((Math.random()-0.5)*100,h/2,(Math.random()-0.5)*100);
+  b.position.set((Math.random()-0.5)*100, h/2, (Math.random()-0.5)*100);
  }
 
  // keys
  for(let i=0;i<level+2;i++){
-  let k=add(new THREE.Mesh(
+  let k = add(new THREE.Mesh(
    new THREE.SphereGeometry(0.5),
    new THREE.MeshStandardMaterial({color:0xffff00})
   ));
@@ -107,9 +111,9 @@ function startLevel(){
   keysList.push(k);
  }
 
- // enemies
+ // enemies (red balls)
  for(let i=0;i<level+1;i++){
-  let e=add(new THREE.Mesh(
+  let e = add(new THREE.Mesh(
    new THREE.SphereGeometry(1.5),
    new THREE.MeshStandardMaterial({color:0xff0000})
   ));
@@ -132,12 +136,12 @@ function updateUI(){
  ui.innerText = "Level "+level+" | Keys "+collected+" / "+keysList.length;
 }
 
-// MOVE
+// MOVE + JUMP
 function move(){
- let speed=0.15;
+ let speed = 0.15;
 
- let f=new THREE.Vector3(Math.sin(yaw),0,Math.cos(yaw));
- let r=new THREE.Vector3(Math.cos(yaw),0,-Math.sin(yaw));
+ let f = new THREE.Vector3(Math.sin(yaw),0,Math.cos(yaw));
+ let r = new THREE.Vector3(Math.cos(yaw),0,-Math.sin(yaw));
 
  if(keys["KeyW"]) camera.position.add(f.clone().multiplyScalar(-speed));
  if(keys["KeyS"]) camera.position.add(f.clone().multiplyScalar(speed));
@@ -146,52 +150,53 @@ function move(){
 
  // jump
  if(keys["Space"] && onGround){
-  velocityY=0.25;
-  onGround=false;
+  velocityY = 0.25;
+  onGround = false;
  }
 
- velocityY-=0.01;
- camera.position.y+=velocityY;
+ velocityY -= 0.01;
+ camera.position.y += velocityY;
 
- if(camera.position.y<=2){
-  camera.position.y=2;
-  velocityY=0;
-  onGround=true;
+ if(camera.position.y <= 2){
+  camera.position.y = 2;
+  velocityY = 0;
+  onGround = true;
  }
 }
 
 // GAME LOGIC
 function update(){
- // collect
+ // collect keys
  keysList.forEach((k,i)=>{
-  if(k && k.position.distanceTo(camera.position)<2){
+  if(k && k.position.distanceTo(camera.position) < 2){
    scene.remove(k);
-   keysList[i]=null;
+   keysList[i] = null;
    collected++;
    updateUI();
   }
  });
 
- // enemies
+ // enemies chase
  enemies.forEach(e=>{
-  let dir=camera.position.clone().sub(e.position).normalize();
-  e.position.add(dir.multiplyScalar(0.04+level*0.01));
+  let dir = camera.position.clone().sub(e.position).normalize();
+  e.position.add(dir.multiplyScalar(0.04 + level*0.01));
 
-  if(e.position.distanceTo(camera.position)<2){
-   alert("Caught!");
+  if(e.position.distanceTo(camera.position) < 2){
+   alert("A red ball got you!");
    location.reload();
   }
  });
 
  // exit
- if(collected===keysList.filter(k=>k).length &&
-    camera.position.distanceTo(exit.position)<4){
+ if(collected === keysList.filter(k=>k).length &&
+    camera.position.distanceTo(exit.position) < 4){
 
   level++;
-  if(level>5){
+
+  if(level > 5){
    alert("YOU WIN!");
    location.reload();
-  }else{
+  } else {
    startLevel();
   }
  }
@@ -204,6 +209,7 @@ function animate(){
  move();
  update();
 
+ // light follows player
  light.position.copy(camera.position);
 
  renderer.render(scene,camera);
