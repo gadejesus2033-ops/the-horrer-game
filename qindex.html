@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Escape City - Levels</title>
+<title>Escape City - Fixed Levels</title>
 <style>
 body { margin:0; overflow:hidden; background:black; }
 #ui {
@@ -13,7 +13,7 @@ body { margin:0; overflow:hidden; background:black; }
 </head>
 <body>
 
-<div id="ui">Level 1 | Keys: 0</div>
+<div id="ui">Level 1</div>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
 
@@ -21,8 +21,14 @@ body { margin:0; overflow:hidden; background:black; }
 let scene, camera, renderer, light;
 let keys={}, yaw=0, pitch=0;
 let velocityY=0, onGround=true;
+
+let level=1;
+let collected=0;
+
 let collectibles=[], enemies=[], safeZones=[], powerups=[];
-let collected=0, level=1;
+let exit=null;
+let worldObjects=[];
+
 let speedBoost=false, freeze=false;
 
 init();
@@ -42,11 +48,11 @@ function init(){
  light=new THREE.PointLight(0xffffff,1,60);
  scene.add(light);
 
- // input
  document.addEventListener("keydown",e=>keys[e.code]=true);
  document.addEventListener("keyup",e=>keys[e.code]=false);
 
  document.body.onclick=()=>document.body.requestPointerLock();
+
  document.addEventListener("mousemove",e=>{
   if(document.pointerLockElement){
    yaw-=e.movementX*0.002;
@@ -59,93 +65,95 @@ function init(){
  animate();
 }
 
+// CLEAR EVERYTHING
 function clearLevel(){
- [...collectibles,...enemies,...safeZones,...powerups].forEach(o=>{
-  if(o.mesh) scene.remove(o.mesh);
-  else scene.remove(o);
- });
+ worldObjects.forEach(obj=>scene.remove(obj));
+ worldObjects=[];
+
  collectibles=[]; enemies=[]; safeZones=[]; powerups=[];
+ exit=null;
+}
+
+// CREATE OBJECT + TRACK
+function add(obj){
+ scene.add(obj);
+ worldObjects.push(obj);
+ return obj;
 }
 
 function startLevel(){
  clearLevel();
  collected=0;
+ speedBoost=false;
+ freeze=false;
 
  // ground
- let ground=new THREE.Mesh(
+ let ground = add(new THREE.Mesh(
   new THREE.PlaneGeometry(200,200),
   new THREE.MeshStandardMaterial({color:0x111111})
- );
+ ));
  ground.rotation.x=-Math.PI/2;
- scene.add(ground);
 
  // buildings
- for(let i=0;i<40+level*10;i++){
+ for(let i=0;i<30+level*10;i++){
   let h=Math.random()*20+5;
-  let b=new THREE.Mesh(
+  let b=add(new THREE.Mesh(
    new THREE.BoxGeometry(5,h,5),
    new THREE.MeshStandardMaterial({color:0x222222})
-  );
+  ));
   b.position.set((Math.random()-0.5)*120,h/2,(Math.random()-0.5)*120);
-  scene.add(b);
  }
 
- // keys (increase with level)
+ // keys
  for(let i=0;i<2+level;i++){
-  let k=new THREE.Mesh(
+  let k=add(new THREE.Mesh(
    new THREE.SphereGeometry(0.5),
    new THREE.MeshStandardMaterial({color:0xffff00})
-  );
+  ));
   k.position.set((Math.random()-0.5)*100,1,(Math.random()-0.5)*100);
-  scene.add(k);
   collectibles.push(k);
  }
 
  // exit
- exit=new THREE.Mesh(
+ exit = add(new THREE.Mesh(
   new THREE.CylinderGeometry(2,2,8),
   new THREE.MeshStandardMaterial({color:0x00ffff})
- );
+ ));
  exit.position.set(0,4,-100);
- scene.add(exit);
 
- // enemies (increase difficulty)
+ // enemies
  for(let i=0;i<level+2;i++){
-  let e=new THREE.Mesh(
+  let e=add(new THREE.Mesh(
    new THREE.SphereGeometry(1.5),
    new THREE.MeshStandardMaterial({color:0xff0000})
-  );
+  ));
   e.position.set((Math.random()-0.5)*80,2,(Math.random()-0.5)*80);
-  scene.add(e);
   enemies.push(e);
  }
 
  // safe zones
  for(let i=0;i<2;i++){
-  let s=new THREE.Mesh(
+  let s=add(new THREE.Mesh(
    new THREE.CylinderGeometry(5,5,0.2,32),
    new THREE.MeshStandardMaterial({color:0x00ff00})
-  );
+  ));
   s.position.set((Math.random()-0.5)*100,0.1,(Math.random()-0.5)*100);
-  scene.add(s);
   safeZones.push(s);
  }
 
  // powerups
- let speedOrb=new THREE.Mesh(
+ let speedOrb = add(new THREE.Mesh(
   new THREE.SphereGeometry(1),
   new THREE.MeshStandardMaterial({color:0x0000ff})
- );
+ ));
  speedOrb.position.set(20,1,20);
- scene.add(speedOrb);
  powerups.push({mesh:speedOrb,type:"speed"});
 
- let freezeOrb=new THREE.Mesh(
+ let freezeOrb = add(new THREE.Mesh(
   new THREE.SphereGeometry(1),
   new THREE.MeshStandardMaterial({color:0xaa00ff})
- );
+ ));
  freezeOrb.position.set(-20,1,-20);
- scene.add(freezeOrb);
  powerups.push({mesh:freezeOrb,type:"freeze"});
 
  updateUI();
@@ -159,6 +167,7 @@ function updateUI(){
 // movement
 function move(){
  let speed=speedBoost?0.3:0.15;
+
  let f=new THREE.Vector3(Math.sin(yaw),0,Math.cos(yaw));
  let r=new THREE.Vector3(Math.cos(yaw),0,-Math.sin(yaw));
 
@@ -182,7 +191,6 @@ function move(){
  }
 }
 
-// gameplay
 function isSafe(){
  return safeZones.some(z=>z.position.distanceTo(camera.position)<5);
 }
@@ -238,7 +246,7 @@ function checkExit(){
   level++;
 
   if(level>5){
-   alert("YOU BEAT ALL LEVELS!");
+   alert("YOU BEAT THE GAME!");
    location.reload();
   }else{
    alert("Level Complete!");
@@ -247,7 +255,7 @@ function checkExit(){
  }
 }
 
-// loop
+// LOOP
 function animate(){
  requestAnimationFrame(animate);
 
