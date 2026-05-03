@@ -2,13 +2,23 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Escape City - Full Game</title>
+<title>Escape City - Distinct Levels</title>
 <style>
 body { margin:0; overflow:hidden; background:black; }
+
+#menu {
+ position:absolute; width:100%; height:100%;
+ background:black; color:white;
+ display:flex; flex-direction:column;
+ align-items:center; justify-content:center;
+ font-family:monospace;
+}
+
 #ui {
  position:absolute; top:10px; left:10px;
  color:white; font-family:monospace;
 }
+
 #map {
  position:absolute; top:10px; right:10px;
  width:150px; height:150px;
@@ -17,6 +27,12 @@ body { margin:0; overflow:hidden; background:black; }
 </style>
 </head>
 <body>
+
+<div id="menu">
+<h1>Escape City</h1>
+<p>WASD Move | Mouse Look | Space Jump | F Flashlight</p>
+<button onclick="startGame()">START</button>
+</div>
 
 <div id="ui"></div>
 <canvas id="map"></canvas>
@@ -33,27 +49,15 @@ let renderer = new THREE.WebGLRenderer({antialias:true});
 renderer.setSize(innerWidth,innerHeight);
 document.body.appendChild(renderer.domElement);
 
-// LIGHTING
-let ambient = new THREE.AmbientLight(0xffffff,0.3);
+// LIGHT
+let ambient = new THREE.AmbientLight(0xffffff,0.5);
 scene.add(ambient);
 
-let flashlight = new THREE.SpotLight(0xffffff,2,100,Math.PI/6);
+let flashlight = new THREE.SpotLight(0xffffff,2,120,Math.PI/6);
 scene.add(flashlight);
 scene.add(flashlight.target);
 
 let flashlightOn = true;
-
-// UI
-let ui = document.getElementById("ui");
-
-// SOUND
-let audioCtx = new (window.AudioContext||window.webkitAudioContext)();
-function beep(){
- let osc = audioCtx.createOscillator();
- osc.connect(audioCtx.destination);
- osc.start();
- osc.stop(audioCtx.currentTime+0.1);
-}
 
 // INPUT
 let keys = {};
@@ -81,13 +85,11 @@ let velocityY=0,onGround=true;
 
 // GAME STATE
 let level=1,collected=0;
-let objects=[], enemies=[], keysList=[], safeZones=[], powerups=[];
+let objects=[], enemies=[], keysList=[];
 let exit;
-let speedBoost=false, freeze=false;
 
-// MINI MAP
-let map = document.getElementById("map");
-let ctx = map.getContext("2d");
+// MAP
+let ctx=document.getElementById("map").getContext("2d");
 
 // ---------- HELPERS ----------
 function add(obj){
@@ -98,99 +100,87 @@ function add(obj){
 
 function clearWorld(){
  objects.forEach(o=>scene.remove(o));
- objects=[]; enemies=[]; keysList=[]; safeZones=[]; powerups=[];
+ objects=[]; enemies=[]; keysList=[];
 }
 
-// ---------- LEVEL ----------
+// ---------- DISTINCT LEVELS ----------
 function startLevel(){
  clearWorld();
  collected=0;
- speedBoost=false;
- freeze=false;
+
+ let groundColor=0x222222;
+ let buildingCount=40;
+ let mapSize=120;
+ let enemyCount=level+2;
+
+ if(level===1){ buildingCount=20; mapSize=80; }
+ if(level===2){ buildingCount=70; mapSize=100; }
+ if(level===3){ buildingCount=15; mapSize=180; enemyCount=8; }
+ if(level===4){ buildingCount=100; mapSize=90; }
+ if(level===5){ buildingCount=10; mapSize=200; enemyCount=15; groundColor=0x440000; }
 
  // ground
- let g = add(new THREE.Mesh(
-  new THREE.PlaneGeometry(200,200),
-  new THREE.MeshStandardMaterial({color:0x222222})
+ let g=add(new THREE.Mesh(
+  new THREE.PlaneGeometry(300,300),
+  new THREE.MeshStandardMaterial({color:groundColor})
  ));
  g.rotation.x=-Math.PI/2;
 
  // buildings
- for(let i=0;i<40+level*10;i++){
+ for(let i=0;i<buildingCount;i++){
   let h=5+Math.random()*20;
   let b=add(new THREE.Mesh(
    new THREE.BoxGeometry(5,h,5),
    new THREE.MeshStandardMaterial({color:0x444444})
   ));
-  b.position.set((Math.random()-0.5)*120,h/2,(Math.random()-0.5)*120);
+
+  if(level===4){
+   b.position.set((i%10)*10-50,h/2,Math.floor(i/10)*10-50);
+  } else {
+   b.position.set((Math.random()-0.5)*mapSize,h/2,(Math.random()-0.5)*mapSize);
+  }
  }
 
  // keys
  for(let i=0;i<level+2;i++){
   let k=add(new THREE.Mesh(
    new THREE.SphereGeometry(0.6),
-   new THREE.MeshStandardMaterial({color:0xffff00,emissive:0x444400})
+   new THREE.MeshStandardMaterial({color:0xffff00,emissive:0x555500})
   ));
-  k.position.set((Math.random()-0.5)*80,1,(Math.random()-0.5)*80);
+  k.position.set((Math.random()-0.5)*mapSize,1,(Math.random()-0.5)*mapSize);
   keysList.push(k);
  }
 
  // enemies
- for(let i=0;i<level+2;i++){
+ for(let i=0;i<enemyCount;i++){
+  let size = level===5 ? 3 : 1.5;
   let e=add(new THREE.Mesh(
-   new THREE.SphereGeometry(1.5),
-   new THREE.MeshStandardMaterial({color:0xff0000,emissive:0x220000})
+   new THREE.SphereGeometry(size),
+   new THREE.MeshStandardMaterial({color:0xff0000,emissive:0x330000})
   ));
-  e.position.set((Math.random()-0.5)*60,2,(Math.random()-0.5)*60);
+  e.position.set((Math.random()-0.5)*mapSize,2,(Math.random()-0.5)*mapSize);
   enemies.push(e);
  }
 
- // safe zones
- for(let i=0;i<2;i++){
-  let s=add(new THREE.Mesh(
-   new THREE.CylinderGeometry(5,5,0.2,32),
-   new THREE.MeshStandardMaterial({color:0x00ff00})
-  ));
-  s.position.set((Math.random()-0.5)*100,0.1,(Math.random()-0.5)*100);
-  safeZones.push(s);
- }
-
- // powerups
- let speedOrb=add(new THREE.Mesh(
-  new THREE.SphereGeometry(1),
-  new THREE.MeshStandardMaterial({color:0x0000ff,emissive:0x000044})
- ));
- speedOrb.position.set(20,1,20);
- powerups.push({mesh:speedOrb,type:"speed"});
-
- let freezeOrb=add(new THREE.Mesh(
-  new THREE.SphereGeometry(1),
-  new THREE.MeshStandardMaterial({color:0xaa00ff,emissive:0x220044})
- ));
- freezeOrb.position.set(-20,1,-20);
- powerups.push({mesh:freezeOrb,type:"freeze"});
-
  // exit
- exit = add(new THREE.Mesh(
+ exit=add(new THREE.Mesh(
   new THREE.BoxGeometry(3,6,3),
   new THREE.MeshStandardMaterial({color:0x00ffff,emissive:0x004444})
  ));
- exit.position.set(0,3,-90);
+ exit.position.set(0,3,-mapSize/2);
 
  updateUI();
 }
 
 // ---------- UI ----------
 function updateUI(){
- ui.innerText = 
-  "Level "+level+
-  " | Keys "+collected+" / "+keysList.length+
-  " | F = Flashlight";
+ document.getElementById("ui").innerText =
+  "Level "+level+" | Keys "+collected+" / "+keysList.length;
 }
 
-// ---------- MOVEMENT ----------
+// ---------- MOVE ----------
 function move(){
- let speed = speedBoost?0.3:0.15;
+ let speed=0.15;
 
  let f=new THREE.Vector3(Math.sin(yaw),0,Math.cos(yaw));
  let r=new THREE.Vector3(Math.cos(yaw),0,-Math.sin(yaw));
@@ -215,55 +205,27 @@ function move(){
  }
 }
 
-// ---------- LOGIC ----------
-function isSafe(){
- return safeZones.some(z=>z.position.distanceTo(camera.position)<5);
-}
-
+// ---------- GAME ----------
 function updateGame(){
- // collect
+
  keysList.forEach((k,i)=>{
   if(k && k.position.distanceTo(camera.position)<2){
    scene.remove(k);
    keysList[i]=null;
    collected++;
-   beep();
    updateUI();
   }
  });
 
- // powerups
- powerups.forEach(p=>{
-  if(p.mesh && p.mesh.position.distanceTo(camera.position)<2){
-   if(p.type==="speed"){
-    speedBoost=true;
-    setTimeout(()=>speedBoost=false,5000);
-   }
-   if(p.type==="freeze"){
-    freeze=true;
-    setTimeout(()=>freeze=false,5000);
-   }
-   scene.remove(p.mesh);
-   p.mesh=null;
+ enemies.forEach(e=>{
+  e.position.lerp(camera.position,0.002+level*0.001);
+
+  if(e.position.distanceTo(camera.position)<2){
+   alert("Caught!");
+   location.reload();
   }
  });
 
- // enemies
- if(!freeze){
-  enemies.forEach(e=>{
-   if(isSafe()) return;
-
-   let dir=camera.position.clone().sub(e.position).normalize();
-   e.position.add(dir.multiplyScalar(0.04+level*0.01));
-
-   if(e.position.distanceTo(camera.position)<2){
-    alert("Caught!");
-    location.reload();
-   }
-  });
- }
-
- // exit
  if(collected===keysList.filter(k=>k).length &&
     camera.position.distanceTo(exit.position)<4){
 
@@ -277,20 +239,18 @@ function updateGame(){
  }
 }
 
-// ---------- MINI MAP ----------
+// ---------- MAP ----------
 function drawMap(){
  ctx.fillStyle="#111";
  ctx.fillRect(0,0,150,150);
 
- function draw(x,z,color){
+ function dot(x,z,color){
   ctx.fillStyle=color;
   ctx.fillRect(75+x,75+z,4,4);
  }
 
- draw(camera.position.x/2,camera.position.z/2,"white");
-
- enemies.forEach(e=>draw(e.position.x/2,e.position.z/2,"red"));
- keysList.forEach(k=>{if(k)draw(k.position.x/2,k.position.z/2,"yellow")});
+ dot(camera.position.x/2,camera.position.z/2,"white");
+ enemies.forEach(e=>dot(e.position.x/2,e.position.z/2,"red"));
 }
 
 // ---------- LOOP ----------
@@ -300,21 +260,24 @@ function animate(){
  move();
  updateGame();
 
- flashlight.visible = flashlightOn;
+ flashlight.visible=flashlightOn;
  flashlight.position.copy(camera.position);
  flashlight.target.position.set(
-  camera.position.x + Math.sin(yaw),
-  camera.position.y + Math.sin(pitch),
-  camera.position.z + Math.cos(yaw)
+  camera.position.x+Math.sin(yaw),
+  camera.position.y+Math.sin(pitch),
+  camera.position.z+Math.cos(yaw)
  );
 
  drawMap();
-
  renderer.render(scene,camera);
 }
 
-// START
-startLevel();
+// ---------- START ----------
+function startGame(){
+ document.getElementById("menu").style.display="none";
+ startLevel();
+}
+
 animate();
 </script>
 
