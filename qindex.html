@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Escape City - Distinct Levels</title>
+<title>Escape City - Complete</title>
 <style>
 body { margin:0; overflow:hidden; background:black; }
 
@@ -31,6 +31,7 @@ body { margin:0; overflow:hidden; background:black; }
 <div id="menu">
 <h1>Escape City</h1>
 <p>WASD Move | Mouse Look | Space Jump | F Flashlight</p>
+<p>Collect ALL keys, then go through the BLUE exit</p>
 <button onclick="startGame()">START</button>
 </div>
 
@@ -42,6 +43,8 @@ body { margin:0; overflow:hidden; background:black; }
 <script>
 // ---------- SETUP ----------
 let scene = new THREE.Scene();
+scene.background = new THREE.Color(0x000000);
+
 let camera = new THREE.PerspectiveCamera(75,innerWidth/innerHeight,0.1,1000);
 camera.position.set(0,2,10);
 
@@ -49,14 +52,13 @@ let renderer = new THREE.WebGLRenderer({antialias:true});
 renderer.setSize(innerWidth,innerHeight);
 document.body.appendChild(renderer.domElement);
 
-// LIGHT
+// LIGHTING
 let ambient = new THREE.AmbientLight(0xffffff,0.5);
 scene.add(ambient);
 
 let flashlight = new THREE.SpotLight(0xffffff,2,120,Math.PI/6);
 scene.add(flashlight);
 scene.add(flashlight.target);
-
 let flashlightOn = true;
 
 // INPUT
@@ -86,7 +88,11 @@ let velocityY=0,onGround=true;
 // GAME STATE
 let level=1,collected=0;
 let objects=[], enemies=[], keysList=[];
+let safeZones=[], powerups=[];
 let exit;
+
+let speedBoost=false;
+let freeze=false;
 
 // MAP
 let ctx=document.getElementById("map").getContext("2d");
@@ -100,13 +106,19 @@ function add(obj){
 
 function clearWorld(){
  objects.forEach(o=>scene.remove(o));
- objects=[]; enemies=[]; keysList=[];
+ objects=[];
+ enemies=[];
+ keysList=[];
+ safeZones=[];
+ powerups=[];
 }
 
-// ---------- DISTINCT LEVELS ----------
+// ---------- LEVELS ----------
 function startLevel(){
  clearWorld();
  collected=0;
+ speedBoost=false;
+ freeze=false;
 
  let groundColor=0x222222;
  let buildingCount=40;
@@ -162,6 +174,31 @@ function startLevel(){
   enemies.push(e);
  }
 
+ // SAFE ZONES
+ for(let i=0;i<2;i++){
+  let s=add(new THREE.Mesh(
+   new THREE.CylinderGeometry(5,5,0.2,32),
+   new THREE.MeshStandardMaterial({color:0x00ff00})
+  ));
+  s.position.set((Math.random()-0.5)*mapSize,0.1,(Math.random()-0.5)*mapSize);
+  safeZones.push(s);
+ }
+
+ // POWERUPS
+ let speedOrb=add(new THREE.Mesh(
+  new THREE.SphereGeometry(1),
+  new THREE.MeshStandardMaterial({color:0x0000ff,emissive:0x000044})
+ ));
+ speedOrb.position.set(20,1,20);
+ powerups.push({mesh:speedOrb,type:"speed"});
+
+ let freezeOrb=add(new THREE.Mesh(
+  new THREE.SphereGeometry(1),
+  new THREE.MeshStandardMaterial({color:0xaa00ff,emissive:0x220044})
+ ));
+ freezeOrb.position.set(-20,1,-20);
+ powerups.push({mesh:freezeOrb,type:"freeze"});
+
  // exit
  exit=add(new THREE.Mesh(
   new THREE.BoxGeometry(3,6,3),
@@ -178,9 +215,14 @@ function updateUI(){
   "Level "+level+" | Keys "+collected+" / "+keysList.length;
 }
 
+// ---------- HELPERS ----------
+function isSafe(){
+ return safeZones.some(z=>z.position.distanceTo(camera.position)<5);
+}
+
 // ---------- MOVE ----------
 function move(){
- let speed=0.15;
+ let speed = speedBoost ? 0.3 : 0.15;
 
  let f=new THREE.Vector3(Math.sin(yaw),0,Math.cos(yaw));
  let r=new THREE.Vector3(Math.cos(yaw),0,-Math.sin(yaw));
@@ -208,6 +250,7 @@ function move(){
 // ---------- GAME ----------
 function updateGame(){
 
+ // collect keys
  keysList.forEach((k,i)=>{
   if(k && k.position.distanceTo(camera.position)<2){
    scene.remove(k);
@@ -217,18 +260,43 @@ function updateGame(){
   }
  });
 
- enemies.forEach(e=>{
-  e.position.lerp(camera.position,0.002+level*0.001);
+ // powerups
+ powerups.forEach(p=>{
+  if(p.mesh && p.mesh.position.distanceTo(camera.position)<2){
 
-  if(e.position.distanceTo(camera.position)<2){
-   alert("Caught!");
-   location.reload();
+   if(p.type==="speed"){
+    speedBoost=true;
+    setTimeout(()=>speedBoost=false,5000);
+   }
+
+   if(p.type==="freeze"){
+    freeze=true;
+    setTimeout(()=>freeze=false,5000);
+   }
+
+   scene.remove(p.mesh);
+   p.mesh=null;
   }
  });
 
- if(collected===keysList.filter(k=>k).length &&
-    camera.position.distanceTo(exit.position)<4){
+ // enemies
+ if(!freeze){
+  enemies.forEach(e=>{
+   if(isSafe()) return;
 
+   e.position.lerp(camera.position,0.002+level*0.001);
+
+   if(e.position.distanceTo(camera.position)<2){
+    alert("Caught!");
+    location.reload();
+   }
+  });
+ }
+
+ // EXIT (must have all keys)
+ let remaining = keysList.filter(k=>k).length;
+
+ if(remaining===0 && camera.position.distanceTo(exit.position)<4){
   level++;
   if(level>5){
    alert("YOU WIN!");
